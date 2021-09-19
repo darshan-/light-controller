@@ -48,8 +48,8 @@ func n() {
 	err := notify.Watch("/home/pi/kbd", c,
 		notify.InAccess, notify.InModify, notify.InCloseWrite, notify.InCloseNowrite, notify.InOpen)
 	if err != nil {
-	 	fmt.Printf("Error setting up watch: %v\n", err)
-	 	return
+		fmt.Printf("Error setting up watch: %v\n", err)
+		return
 	}
 	defer notify.Stop(c)
 
@@ -61,7 +61,6 @@ func n() {
 		}
 	}
 }
-
 
 func fsn() {
 	fmt.Println("fsn")
@@ -141,6 +140,11 @@ func old() {
 
 	b := make([]byte, 16)
 
+	// If shift is down when we launch, that's messy.  We could turn shift to true for autorepeat, but we'd still
+	//  potentially get another input (like dial rotation) while shift was down without knowing it at first...
+	// So not perfect, but good enough for my personal use.
+	shift := false
+
 	for {
 		n, err := f.Read(b)
 		if err != nil {
@@ -162,6 +166,39 @@ func old() {
 			value := uint16(b[12])
 
 			fmt.Printf("%v, %v, %v\n", typ, code, value)
+			if typ == 1 { // Key event
+				if value == 1 { // key down
+					switch code {
+					case 114: // dial left
+						if shift {
+							fmt.Println("turn down the kelvin")
+						} else {
+							fmt.Println("turn down the brightness")
+						}
+					case 115: // dial right
+						if shift {
+							fmt.Println("turn up the kelvin")
+						} else {
+							fmt.Println("turn up the brightness")
+						}
+					case 42: // shift
+						shift = true
+					}
+				} else if value == 0 { // key up; only care for modifier keys
+					switch code {
+					case 42: // shift
+						fmt.Println("shift up")
+						shift = false
+					default:
+						fmt.Println("something else up")
+					}
+				} else if value == 2 { // value == 2 is for autorepeat, which we dont' care about
+					switch code {
+					case 42: // shift
+						shift = true
+					}
+				}
+			}
 		} else {
 			fmt.Println("!")
 		}
