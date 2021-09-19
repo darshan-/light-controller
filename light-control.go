@@ -148,14 +148,20 @@ func old() {
 			return
 		}
 		if n > 0 {
-			//fmt.Printf("Read %v bytes\n", n)
-			for i:=0; i < 16; i++ {
-				fmt.Printf("%02X ", int(b[i]))
-				if i % 4 == 3 {
-					fmt.Printf(" ")
-				}
-			}
-			fmt.Println("")
+			// for i:=0; i < 16; i++ {
+			// 	fmt.Printf("%02X ", int(b[i]))
+			// 	if i % 4 == 3 {
+			// 		fmt.Printf(" ")
+			// 	}
+			// }
+			// fmt.Println("")
+
+			// Skip 8 bytes for timestamp struct, then:
+			typ := uint16(b[8])
+			code := uint16(b[10])
+			value := uint16(b[12])
+
+			fmt.Printf("%v, %v, %v\n", typ, code, value)
 		} else {
 			fmt.Println("!")
 		}
