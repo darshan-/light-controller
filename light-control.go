@@ -139,7 +139,7 @@ func old() {
 
 	fmt.Println("Opened dev file")
 
-	b := make([]byte, 1)
+	b := make([]byte, 16)
 
 	for {
 		n, err := f.Read(b)
@@ -149,7 +149,15 @@ func old() {
 		}
 		if n > 0 {
 			//fmt.Printf("Read %v bytes\n", n)
-			fmt.Printf("%d", int(b[0]))
+			for i:=0; i < 16; i++ {
+				fmt.Printf("%02X ", int(b[i]))
+				if i % 4 == 3 {
+					fmt.Printf(" ")
+				}
+			}
+			fmt.Println("")
+		} else {
+			fmt.Println("!")
 		}
 	}
 }
