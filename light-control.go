@@ -205,10 +205,10 @@ func shiftDown() bool {
 
 const lifxStateUrl = "https://api.lifx.com/v1/lights/all/state"
 
-func turnOff() {
+func power(state string) {
 	//body := bytes.NewBuffer(`{"color": "kelvin:3500 brightness:1", "power": "on"`)
 	//body := bytes.NewBuffer([]byte(`power=off`))
-	body := strings.NewReader(`power=off`)
+	body := strings.NewReader("power=" + state)
 	req, err := http.NewRequest(http.MethodPut, lifxStateUrl, body)
 
 	if err != nil {
@@ -220,7 +220,7 @@ func turnOff() {
 	req.Header.Add("Authorization", "Bearer " + lifx_token)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	fmt.Println(req)
+	//fmt.Println(req)
 	//httpClient := &http.Client{}
 
 	//resp, err := httpClient.Do(req)
@@ -231,6 +231,10 @@ func turnOff() {
 	}
 	defer resp.Body.Close()
 	//fmt.Println("Got resp:", resp)
+}
+
+func turnOff() {
+	power("off")
 }
 
 func old() {
@@ -282,7 +286,9 @@ func old() {
 						// ESC 1, F1-F6 -> 59-63, `~ 41
 						//
 					case 1: // ESC
-						turnOff()
+						power("off")
+					case 41: // `
+						power("on")
 					case 114: // dial left
 						if shiftDown() {
 							fmt.Println("turn down the kelvin")
