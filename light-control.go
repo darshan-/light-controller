@@ -253,6 +253,8 @@ func old() {
 						} else {
 							fmt.Println("turn up the brightness")
 						}
+					default:
+						fmt.Println("keycode:", code)
 					}
 				} else if value == 0 { // key up, which we don't care about
 				} else if value == 2 { // autorepeat, which we don't care about
