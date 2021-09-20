@@ -206,35 +206,33 @@ func shiftDown() bool {
 const lifxStateUrl = "https://api.lifx.com/v1/lights/all/state"
 
 func power(state string) {
-	//body := bytes.NewBuffer(`{"color": "kelvin:3500 brightness:1", "power": "on"`)
-	//body := bytes.NewBuffer([]byte(`power=off`))
-	body := strings.NewReader("power=" + state)
-	req, err := http.NewRequest(http.MethodPut, lifxStateUrl, body)
+	putReq("application/x-www-form-urlencoded", "power=" + state)
+}
 
+func putJson(json string) {
+	putReq("application/json", json)
+}
+
+func setWhite(k, b string) {
+	putJson(`{"color": "kelvin:` + k + ` brightness:` + b + `", "power": "on"}`)
+}
+
+func putReq(contentType, body string) {
+	req, err := http.NewRequest(http.MethodPut, lifxStateUrl, strings.NewReader(body))
 	if err != nil {
 		fmt.Println("Error creating request:", err)
 		return
 	}
 
-	//req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Bearer " + lifx_token)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", contentType)
 
-	//fmt.Println(req)
-	//httpClient := &http.Client{}
-
-	//resp, err := httpClient.Do(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Println("Error doing request:", err)
 		return
 	}
 	defer resp.Body.Close()
-	//fmt.Println("Got resp:", resp)
-}
-
-func turnOff() {
-	power("off")
 }
 
 func old() {
@@ -285,9 +283,21 @@ func old() {
 						// TAB 15, CAPS 58, SHIFT 42, CTRL 29, ALT 56
 						// ESC 1, F1-F6 -> 59-63, `~ 41
 						//
-					case 1: // ESC
+					case 1: // [ESC]
 						power("off")
-					case 41: // `
+					case 2: // [1]
+						setWhite("1500", "0.25")
+					case 3: // [2]
+						setWhite("2000", "0.35")
+					case 4: // [3]
+						setWhite("2700", "0.5")
+					case 5: // [4]
+						setWhite("3500", "0.75")
+					case 6: // [5]
+						setWhite("4300", "1")
+					case 7: // [6]
+						setWhite("5200", "1")
+					case 41: // [`]
 						power("on")
 					case 114: // dial left
 						if shiftDown() {
