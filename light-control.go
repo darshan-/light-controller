@@ -1,8 +1,11 @@
 package main
 
 import (
+	//"bytes"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -200,6 +203,36 @@ func shiftDown() bool {
 	return false
 }
 
+const lifxStateUrl = "https://api.lifx.com/v1/lights/all/state"
+
+func turnOff() {
+	//body := bytes.NewBuffer(`{"color": "kelvin:3500 brightness:1", "power": "on"`)
+	//body := bytes.NewBuffer([]byte(`power=off`))
+	body := strings.NewReader(`power=off`)
+	req, err := http.NewRequest(http.MethodPut, lifxStateUrl, body)
+
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return
+	}
+
+	//req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Bearer " + lifx_token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	fmt.Println(req)
+	//httpClient := &http.Client{}
+
+	//resp, err := httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println("Error doing request:", err)
+		return
+	}
+	defer resp.Body.Close()
+	//fmt.Println("Got resp:", resp)
+}
+
 func old() {
 	fmt.Println("old!")
 
@@ -237,10 +270,19 @@ func old() {
 			code := uint16(b[10])
 			value := uint16(b[12])
 
-			fmt.Printf("%v, %v, %v\n", typ, code, value)
+			//fmt.Printf("%v, %v, %v\n", typ, code, value)
 			if typ == 1 { // Key event
 				if value == 1 { // key down
 					switch code {
+						// 1 key -> keycode2 and up by ones through 6 key -> keycode 7
+						// QWERT -> 16-20
+						// ASDFG -> 30-34
+						// ZXCVB -> 44-48
+						// TAB 15, CAPS 58, SHIFT 42, CTRL 29, ALT 56
+						// ESC 1, F1-F6 -> 59-63, `~ 41
+						//
+					case 1: // ESC
+						turnOff()
 					case 114: // dial left
 						if shiftDown() {
 							fmt.Println("turn down the kelvin")
