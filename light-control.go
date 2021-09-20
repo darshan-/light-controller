@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"syscall"
+	"unsafe"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/rjeczalik/notify"
@@ -30,8 +32,59 @@ import (
 // /dev/input/by-path/platform-fd500000.pcie-pci-0000\:01\:00.0-usb-0\:1.4.4\:1.1-event on pi
 // Or maybe /dev/input/by-id/usb-SONiX_USB-Keyboard-event-kbd
 
+// Having first done `mkfifo fifo`
+// cat /dev/input/event0 >>fifo&
+// cat /dev/input/event1 >>fifo&
+
+// #define EVIOCGKEY(len)		_IOC(_IOC_READ, 'E', 0x18, len)
+/*
+#define _IOC(dir,type,nr,size) \
+	(((dir)  << _IOC_DIRSHIFT) | \
+	 ((type) << _IOC_TYPESHIFT) | \
+	 ((nr)   << _IOC_NRSHIFT) | \
+	 ((size) << _IOC_SIZESHIFT))
+
+#define _IOC_READ	2U
+#define _IOC_NRBITS	8
+#define _IOC_TYPEBITS	8
+#define _IOC_SIZEBITS	14
+#define _IOC_DIRBITS	2
+#define _IOC_NRSHIFT	0
+#define _IOC_TYPESHIFT	(_IOC_NRSHIFT+_IOC_NRBITS)
+#define _IOC_SIZESHIFT	(_IOC_TYPESHIFT+_IOC_TYPEBITS)
+#define _IOC_DIRSHIFT	(_IOC_SIZESHIFT+_IOC_SIZEBITS)
+*/
+
+
+const KEY_MAX = 0x2ff
+
+var key_map [KEY_MAX/8 + 1]uint8
+var kmp = uintptr(unsafe.Pointer(&key_map))
+
+/*
+const ioc_read = 2
+const ioc_nrbits = 8
+const ioc_typebits = 8
+const ioc_sizebits = 14
+const ioc_dirbits = 2
+const ioc_nrshift = 0
+const ioc_typeshift = ioc_nrshift + 
+*/
+
+const eviocgkey = 2 << (8+8+14) | 69 << 8 | 0x18 << 0 | (KEY_MAX/8 + 1) << (8+8)
+var fd uintptr
+
 func main() {
 	fmt.Println("Hi!")
+
+	f, err := os.Open("/dev/input/event0")
+	if err != nil {
+		fmt.Printf("Error opening device file: %v\n", err)
+		return
+	}
+	defer f.Close()
+	fd = f.Fd()
+
 	old()
 }
 
@@ -123,6 +176,30 @@ func fsn() {
 	// }
 }
 
+
+// https://www.arv.io/articles/raw-keyboard-input-erlang-linux
+// https://elixir.bootlin.com/linux/latest/source/include/uapi/asm-generic/ioctl.h
+func shiftDown() bool {
+	//ioctl(fd, EVIOCGKEY(sizeof(key_map)), key_map);
+
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, eviocgkey, kmp)
+	if errno != 0 {
+		fmt.Println("Ioctl return error code:", errno)
+	}
+
+
+	// int keyb = key_map[key/8];  //  The key we want (and the seven others arround it)
+    // int mask = 1 << (key % 8);  //  Put a one in the same column as out key state will be in;
+
+	for i := 0; i < len(key_map); i++ {
+		if key_map[i] != 0 {
+			fmt.Printf("index %v is %v\n", i, key_map[i])
+		}
+	}
+
+	return false
+}
+
 func old() {
 	fmt.Println("old!")
 
@@ -139,11 +216,6 @@ func old() {
 	fmt.Println("Opened dev file")
 
 	b := make([]byte, 16)
-
-	// If shift is down when we launch, that's messy.  We could turn shift to true for autorepeat, but we'd still
-	//  potentially get another input (like dial rotation) while shift was down without knowing it at first...
-	// So not perfect, but good enough for my personal use.
-	shift := false
 
 	for {
 		n, err := f.Read(b)
@@ -170,33 +242,20 @@ func old() {
 				if value == 1 { // key down
 					switch code {
 					case 114: // dial left
-						if shift {
+						if shiftDown() {
 							fmt.Println("turn down the kelvin")
 						} else {
 							fmt.Println("turn down the brightness")
 						}
 					case 115: // dial right
-						if shift {
+						if shiftDown() {
 							fmt.Println("turn up the kelvin")
 						} else {
 							fmt.Println("turn up the brightness")
 						}
-					case 42: // shift
-						shift = true
 					}
-				} else if value == 0 { // key up; only care for modifier keys
-					switch code {
-					case 42: // shift
-						fmt.Println("shift up")
-						shift = false
-					default:
-						fmt.Println("something else up")
-					}
-				} else if value == 2 { // value == 2 is for autorepeat, which we dont' care about
-					switch code {
-					case 42: // shift
-						shift = true
-					}
+				} else if value == 0 { // key up, which we don't care about
+				} else if value == 2 { // autorepeat, which we don't care about
 				}
 			}
 		} else {
