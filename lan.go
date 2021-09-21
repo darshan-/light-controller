@@ -79,7 +79,7 @@ func gotDevice(d lifxlan.Device) {
 	// color.Brightness += 655 // 2^16 / 100
 	// setColor(ld, conn, color)
 
-	setPower(ld, conn, lifxlan.PowerOn)
+	togglePower(ld, conn)
 }
 
 func getColor(d light.Device, conn net.Conn) *lifxlan.Color {
@@ -114,5 +114,24 @@ func setPower(d light.Device, conn net.Conn, pow lifxlan.Power) {
 	if err != nil {
 		fmt.Println("SetPower error:", err)
 		return
+	}
+}
+
+func getPower(d light.Device, conn net.Conn) (pow lifxlan.Power) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	pow, err := d.GetPower(ctx, conn)
+	if err != nil {
+		fmt.Println("GetPower error:", err)
+	}
+
+	return
+}
+
+func togglePower(d light.Device, conn net.Conn) {
+	if getPower(d, conn) != lifxlan.PowerOn {
+		setPower(d, conn, lifxlan.PowerOn)
+	} else {
+		setPower(d, conn, lifxlan.PowerOff)
 	}
 }
