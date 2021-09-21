@@ -22,6 +22,9 @@ Disable ttys and X
 // cat /dev/input/event0 >>fifo&
 // cat /dev/input/event1 >>fifo&
 
+const max_brightness = 65535
+const brightness_step = 1311 // 2% of 65535
+
 var dev light.Device
 var conn net.Conn
 
@@ -94,6 +97,26 @@ func setColor(color *lifxlan.Color) {
 	}
 }
 
+func makeDimmer() {
+	color := getColor()
+	if color.Brightness <= brightness_step {
+		color.Brightness = 0
+	} else {
+		color.Brightness -= brightness_step
+	}
+	setColor(color)
+}
+
+func makeBrighter() {
+	color := getColor()
+	if color.Brightness >= max_brightness - brightness_step {
+		color.Brightness = max_brightness
+	} else {
+		color.Brightness += brightness_step
+	}
+	setColor(color)
+}
+
 func setPower(pow lifxlan.Power) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -138,8 +161,10 @@ func putJson(json string) {
 	putReq("application/json", json)
 }
 
-func setWhite(k, b string) {
-	putJson(`{"color": "kelvin:` + k + ` brightness:` + b + `", "power": "on"}`)
+func setWhite(k uint16, b float32) {
+	//putJson(`{"color": "kelvin:` + k + ` brightness:` + b + `", "power": "on"}`)
+	setColor(&lifxlan.Color{Kelvin: k, Brightness: uint16(b * 65535)})
+	setPower(lifxlan.PowerOn)
 }
 
 func putReq(contentType, body string) {
@@ -201,21 +226,23 @@ func main() {
 						//power("off")
 						togglePower()
 					case 2: // [1]
-						setWhite("1500", "0.25")
+						setWhite(1500, 0.25)
 					case 3: // [2]
-						setWhite("2000", "0.35")
+						setWhite(2000, 0.35)
 					case 4: // [3]
-						setWhite("2700", "0.5")
+						setWhite(2700, 0.5)
 					case 5: // [4]
-						setWhite("3500", "0.75")
+						setWhite(3500, 0.75)
 					case 6: // [5]
-						setWhite("4300", "1")
+						setWhite(4300, 1)
 					case 7: // [6]
-						setWhite("5200", "1")
+						setWhite(5200, 1)
 					case 41: // [`]
 						power("on")
 					case 114: // dial left
+						makeDimmer()
 					case 115: // dial right
+						makeBrighter()
 					default:
 						fmt.Println("keycode:", code)
 					}
