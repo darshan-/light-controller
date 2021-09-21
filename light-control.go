@@ -271,8 +271,14 @@ func main() {
 					default:
 						fmt.Println("keycode:", code)
 					}
-				} else if value == 0 { // key up, which we don't care about
-				} else if value == 2 { // autorepeat, which we don't care about
+				} else if value == 0 { // key up
+				} else if value == 2 { // autorepeat
+					switch code {
+					case 62: // F4 (<<)
+						makeWarmer()
+					case 63: // F5 (>>)
+						makeCooler()
+					}
 				}
 			}
 		} else {
