@@ -23,7 +23,8 @@ Disable ttys and X
 // cat /dev/input/event1 >>fifo&
 
 const max_brightness = 65535
-const brightness_step = 1311 // 2% of 65535
+const brightness_step = 2185 // 1/30 of range // 1966 // 3% of max
+const kelvin_step = 250 // 1/30 of range
 
 var dev light.Device
 var conn net.Conn
@@ -90,7 +91,7 @@ func getColor() *lifxlan.Color {
 func setColor(color *lifxlan.Color) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	err := dev.SetColor(ctx, conn, color, 0, false)
+	err := dev.SetColor(ctx, conn, color, 75*time.Millisecond, false)
 	if err != nil {
 		fmt.Println("SetColor error:", err)
 		return
@@ -113,6 +114,26 @@ func makeBrighter() {
 		color.Brightness = max_brightness
 	} else {
 		color.Brightness += brightness_step
+	}
+	setColor(color)
+}
+
+func makeWarmer() {
+	color := getColor()
+	if color.Kelvin <= lifxlan.KelvinMin + kelvin_step {
+		color.Kelvin = lifxlan.KelvinMin
+	} else {
+		color.Kelvin -= kelvin_step
+	}
+	setColor(color)
+}
+
+func makeCooler() {
+	color := getColor()
+	if color.Kelvin >= lifxlan.KelvinMax - kelvin_step {
+		color.Kelvin = lifxlan.KelvinMax
+	} else {
+		color.Kelvin += kelvin_step
 	}
 	setColor(color)
 }
@@ -220,7 +241,7 @@ func main() {
 						// ASDFG -> 30-34
 						// ZXCVB -> 44-48
 						// TAB 15, CAPS 58, SHIFT 42, CTRL 29, ALT 56
-						// ESC 1, F1-F6 -> 59-63, `~ 41
+						// ESC 1, F1-F5 -> 59-63, `~ 41
 						//
 					case 1: // [ESC]
 						//power("off")
@@ -238,11 +259,15 @@ func main() {
 					case 7: // [6]
 						setWhite(5200, 1)
 					case 41: // [`]
-						power("on")
+						//power("on")
 					case 114: // dial left
 						makeDimmer()
 					case 115: // dial right
 						makeBrighter()
+					case 62: // F4 (<<)
+						makeWarmer()
+					case 63: // F5 (>>)
+						makeCooler()
 					default:
 						fmt.Println("keycode:", code)
 					}

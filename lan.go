@@ -69,17 +69,17 @@ func gotDevice(d lifxlan.Device) {
 		return
 	}
 
-	// color := getColor(ld, conn)
+	color := getColor(ld, conn)
 	// //fmt.Println(color)
-	// fmt.Println("Hue       :", color.Hue)
-	// fmt.Println("Saturation:", color.Saturation)
-	// fmt.Println("Brightness:", color.Brightness)
-	// fmt.Println("Kelvin    :", color.Kelvin)
+	fmt.Println("Hue       :", color.Hue)
+	fmt.Println("Saturation:", color.Saturation)
+	fmt.Println("Brightness:", color.Brightness)
+	fmt.Println("Kelvin    :", color.Kelvin)
 
 	// color.Brightness += 655 // 2^16 / 100
 	// setColor(ld, conn, color)
 
-	togglePower(ld, conn)
+	//togglePower(ld, conn)
 }
 
 func getColor(d light.Device, conn net.Conn) *lifxlan.Color {
