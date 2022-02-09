@@ -30,6 +30,7 @@ var dev light.Device
 var conn net.Conn
 
 func initLocalDevice() {
+	fmt.Println("initLocalDevice top")
 	ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
 	defer cancel()
 
@@ -59,6 +60,7 @@ func initLocalDevice() {
 	}
 
 	wg.Wait()
+	fmt.Println("initLocalDevice bottom")
 }
 
 func gotDevice(d lifxlan.Device) {
@@ -216,7 +218,35 @@ func main() {
 
 	fmt.Println("Opened dev file")
 
-	initLocalDevice()
+	// initLocalDevice()
+	// fmt.Println("initLocalDevice returned")
+
+	// sleepDur := 2 * time.Second
+	// while dev == nil  && sleepDur < 10 * time.Second {
+	// 	time.Sleep(sleepDur)
+	// 	sleepDur *= 2
+
+	// 	initLocalDevice()
+	// }
+
+	sleepDur := 2 * time.Second
+	for sleepDur <= 32 * time.Second {
+		initLocalDevice()
+		fmt.Println("initLocalDevice returned")
+
+		if dev != nil { break }
+
+		fmt.Printf("dev is null, sleeping for %v\n", sleepDur)
+
+		time.Sleep(sleepDur)
+		sleepDur *= 2
+	}
+
+	if dev == nil {
+		panic("Couldn't get a device!")
+	} else {
+		fmt.Println("Got lifx device!")
+	}
 
 	b := make([]byte, 16)
 

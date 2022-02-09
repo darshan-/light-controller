@@ -1,0 +1,24 @@
+[Unit]
+Description=LightController
+#After=network.target local-fs.target dhcpcd.service
+
+#After=network-online.target local-fs.target
+#Wants=network-online.target
+
+
+# Need to be sure to:
+#   systemctl enable systemd-networkd.service systemd-networkd-wait-online.service
+# Specfically for these to work
+
+After=systemd-networkd-wait-online.service
+Wants=systemd-networkd-wait-online.service
+
+[Service]
+Type=simple
+#ExecStart=/usr/bin/sudo -u root /home/darshan/bin/sol-post-requester
+ExecStart=/usr/bin/sudo -u pi /home/pi/run-lc.sh
+#ExecStart=/home/pi/run-lc.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
