@@ -1,11 +1,6 @@
 #!/bin/bash
 
-# Run with: `nohup ./run-lc.sh&`
+# Run with `nohup ./run-lc.sh&` if not having systemd handle it as a service
 
-#fifo="/home/pi/fifo"
-
-#rm $fifo
-#mkfifo $fifo
-#cat /dev/input/event0 >>$fifo&
-#cat /dev/input/event1 >>$fifo&
+sudo iw dev wlan0 set power_save off
 sudo /home/pi/light-control &>>/home/pi/lc-logs

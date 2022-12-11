@@ -160,7 +160,7 @@ func setPower(pow lifxlan.Power, deadline time.Duration) {
 	if err != nil {
 		log.Println("SetPower error:", err)
 		if deadline < maxDeadline {
-			setPower(pow, deadline * 2)
+			setPower(pow, deadline*2)
 		} else {
 			log.Fatal("Max deadline exceeded")
 		}
@@ -184,10 +184,9 @@ func getPower(deadline time.Duration) (pow lifxlan.Power) {
 }
 
 // Note -- with current cat /dev/input/event0 >>fifo& approach, if you accidentally do that more than once,
-//
-//	you'll end up with 2 (or more) copies of each event.  If that's even, toggles won't work.  If it's greater
-//	than one, that'll move things like brightness by too much.  Let's do a script to remove and set up fifo on
-//	launch.
+// you'll end up with 2 (or more) copies of each event.  If that's even, toggles won't work.  If it's greater
+// than one, that'll move things like brightness by too much.  Let's do a script to remove and set up fifo on
+// launch.
 func togglePower() {
 	log.Println("togglePower")
 	if getPower(cmdDeadline) != lifxlan.PowerOn {
@@ -257,8 +256,49 @@ func main() {
 
 	go keys()
 	go dial()
+	go keepAlive()
 
 	<-quit
+}
+
+// Exponential backoff worked, but I don't want to wait 15 seconds (1 + 2 + 4 + 8 (and then instantly work))
+// to turn on my freaking light, and it really seems like either the pi (my guess) or the light
+// (seems much less likely) is losing its connection.
+//
+// So I want to try regularly pinging the light with a getColor request and see if that resolves the issue
+
+// Keep alive seems to be working -- getting a lot of timeouts, but those seem to work right away on second
+// try, so so far seems to be keeping network active.
+
+// Finally googled ("braved") [raspberry pi wifi powers down] and found suggesion that wifi does power down,
+// lots of people complaining, and some folks saying you can check power save setting with:
+//
+//	iw dev wlan0 get power_save
+//
+// and set it with:
+//
+//	sudo iw dev wlan0 set power_save off
+//
+// Just checked, and that is reset to on when restarting the device.  So I want to check if I can quickly and
+// easily figure out how to set that as the default, but if not, the easy solution is to just turn it off in
+// start-up script.  If fact, that may actually be the best approach, because it keeps everything more self-
+// contained and easier to set up if/when I move to another device.  Yeah, I think I will just do that.
+//
+// It's crazy how mixed the reports are of that fixing things versus doing nothing, and some people claiming
+// with some authority that the value is reported incorrectly, but that the driver is hard-coded to never
+// power save.  So, we'll try this for now, and see.  Maybe it helps, and we won't see the timeouts for our
+// keepAlive getColor anymore, and everything will be perfect, which'd be great.  Or maybe it won't help, and
+// keepAlive will come to the rescue.  Or maybe neithe thing will work, and we'll be down to 15-second delays
+// sometimes, which would suck, but even *that* is an improvement over the status quo.  We'll see.
+func keepAlive() {
+	for {
+		color := getColor(cmdDeadline)
+		if color == nil {
+			log.Printf("----- keepAlive couldn't reach light!")
+		}
+
+		time.Sleep(4 * time.Second)
+	}
 }
 
 func keys() {
