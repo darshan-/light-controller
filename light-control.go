@@ -275,15 +275,9 @@ func keys() {
 			setWhite(4300, 1)
 		case 0x23: // [6]
 			setWhite(5200, 1)
-		//case 0x35: // [`]
-		//power("on")
-		case 114: // dial left
-			makeDimmer()
-		case 115: // dial right
-			makeBrighter()
-		case 62: // F4 (<<)
+		case 0x3d: // F4 (<<)
 			makeWarmer()
-		case 63: // F5 (>>)
+		case 0x3e: // F5 (>>)
 			makeCooler()
 		case 0:
 			// ignore
