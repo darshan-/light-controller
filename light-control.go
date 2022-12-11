@@ -27,7 +27,8 @@ const (
 	brightness_step = 2185 // 1/30 of range // 1966 // 3% of max
 	kelvin_step     = 250  // 1/30 of range
 
-	cmdDeadline = 3 * time.Second
+	cmdDeadline = 1 * time.Second
+	maxDeadline = 10 * time.Second
 )
 
 var (
@@ -48,8 +49,7 @@ func initLocalDevice() {
 		defer wg.Done()
 		if err := lifxlan.Discover(ctx, deviceChan, ""); err != nil {
 			if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
-				log.Printf("Discover failed: %v\n", err)
-				return
+				log.Fatalf("Discover failed: %v\n", err)
 			}
 		}
 	}()
@@ -73,96 +73,111 @@ func initLocalDevice() {
 func gotDevice(d lifxlan.Device) {
 	conn, err := d.Dial()
 	if err != nil {
-		log.Println("Device.Dial() error:", err)
-		return
+		log.Fatalf("Device.Dial() error: %v", err)
 	}
 	defer conn.Close() // Good idea?
 
 	dev, err = light.Wrap(context.Background(), d, false)
 	if err != nil {
-		log.Println("light.Wrap error:", err)
-		return
+		log.Fatalf("light.Wrap error: %v", err)
 	}
 }
 
-func getColor() *lifxlan.Color {
-	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
+func getColor(deadline time.Duration) *lifxlan.Color {
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 	color, err := dev.GetColor(ctx, conn)
 	if err != nil {
 		log.Println("GetColor error:", err)
-		return nil
+		if deadline < maxDeadline {
+			return getColor(deadline * 2)
+		} else {
+			log.Fatal("Max deadline exceeded")
+		}
 	}
 
 	return color
 }
 
-func setColor(color *lifxlan.Color) {
-	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
+func setColor(color *lifxlan.Color, deadline time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 	err := dev.SetColor(ctx, conn, color, 75*time.Millisecond, false)
 	if err != nil {
 		log.Println("SetColor error:", err)
-		return
+		if deadline < maxDeadline {
+			setColor(color, deadline)
+		} else {
+			log.Fatal("Max deadline exceeded")
+		}
 	}
 }
 
 func makeDimmer() {
-	color := getColor()
+	color := getColor(cmdDeadline)
 	if color.Brightness <= brightness_step {
 		color.Brightness = 0
 	} else {
 		color.Brightness -= brightness_step
 	}
-	setColor(color)
+	setColor(color, cmdDeadline)
 }
 
 func makeBrighter() {
-	color := getColor()
+	color := getColor(cmdDeadline)
 	if color.Brightness >= max_brightness-brightness_step {
 		color.Brightness = max_brightness
 	} else {
 		color.Brightness += brightness_step
 	}
-	setColor(color)
+	setColor(color, cmdDeadline)
 }
 
 func makeWarmer() {
-	color := getColor()
+	color := getColor(cmdDeadline)
 	if color.Kelvin <= lifxlan.KelvinMin+kelvin_step {
 		color.Kelvin = lifxlan.KelvinMin
 	} else {
 		color.Kelvin -= kelvin_step
 	}
-	setColor(color)
+	setColor(color, cmdDeadline)
 }
 
 func makeCooler() {
-	color := getColor()
+	color := getColor(cmdDeadline)
 	if color.Kelvin >= lifxlan.KelvinMax-kelvin_step {
 		color.Kelvin = lifxlan.KelvinMax
 	} else {
 		color.Kelvin += kelvin_step
 	}
-	setColor(color)
+	setColor(color, cmdDeadline)
 }
 
-func setPower(pow lifxlan.Power) {
-	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
+func setPower(pow lifxlan.Power, deadline time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 	err := dev.SetPower(ctx, conn, pow, false)
 	if err != nil {
 		log.Println("SetPower error:", err)
-		return
+		if deadline < maxDeadline {
+			setPower(pow, deadline * 2)
+		} else {
+			log.Fatal("Max deadline exceeded")
+		}
 	}
 }
 
-func getPower() (pow lifxlan.Power) {
-	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
+func getPower(deadline time.Duration) (pow lifxlan.Power) {
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 	pow, err := dev.GetPower(ctx, conn)
 	if err != nil {
 		log.Println("GetPower error:", err)
+		if deadline < maxDeadline {
+			return getPower(deadline * 2)
+		} else {
+			log.Fatal("Max deadline exceeded")
+		}
 	}
 
 	return
@@ -175,10 +190,10 @@ func getPower() (pow lifxlan.Power) {
 //	launch.
 func togglePower() {
 	log.Println("togglePower")
-	if getPower() != lifxlan.PowerOn {
-		setPower(lifxlan.PowerOn)
+	if getPower(cmdDeadline) != lifxlan.PowerOn {
+		setPower(lifxlan.PowerOn, cmdDeadline)
 	} else {
-		setPower(lifxlan.PowerOff)
+		setPower(lifxlan.PowerOff, cmdDeadline)
 	}
 }
 
@@ -194,8 +209,8 @@ func putJson(json string) {
 
 func setWhite(k uint16, b float32) {
 	//putJson(`{"color": "kelvin:` + k + ` brightness:` + b + `", "power": "on"}`)
-	setColor(&lifxlan.Color{Kelvin: k, Brightness: uint16(b * 65535)})
-	setPower(lifxlan.PowerOn)
+	setColor(&lifxlan.Color{Kelvin: k, Brightness: uint16(b * 65535)}, cmdDeadline)
+	setPower(lifxlan.PowerOn, cmdDeadline)
 }
 
 func putReq(contentType, body string) {
