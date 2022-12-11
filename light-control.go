@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -22,9 +22,13 @@ Disable ttys and X
 // cat /dev/input/event0 >>fifo&
 // cat /dev/input/event1 >>fifo&
 
-const max_brightness = 65535
-const brightness_step = 2185 // 1/30 of range // 1966 // 3% of max
-const kelvin_step = 250      // 1/30 of range
+const (
+	max_brightness  = 65535
+	brightness_step = 2185 // 1/30 of range // 1966 // 3% of max
+	kelvin_step     = 250  // 1/30 of range
+
+	cmdDeadline = 3 * time.Second
+)
 
 var (
 	dev  light.Device
@@ -33,7 +37,7 @@ var (
 )
 
 func initLocalDevice() {
-	fmt.Println("initLocalDevice top")
+	log.Println("initLocalDevice top")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -44,7 +48,7 @@ func initLocalDevice() {
 		defer wg.Done()
 		if err := lifxlan.Discover(ctx, deviceChan, ""); err != nil {
 			if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
-				fmt.Printf("Discover failed: %v\n", err)
+				log.Printf("Discover failed: %v\n", err)
 				return
 			}
 		}
@@ -54,7 +58,7 @@ func initLocalDevice() {
 		wg.Add(1)
 		go func(device lifxlan.Device) {
 			defer wg.Done()
-			fmt.Println(device)
+			log.Println(device)
 			gotDevice(device)
 
 			// I'm not currently looking for more than one device; so just cancel once we get it
@@ -63,30 +67,30 @@ func initLocalDevice() {
 	}
 
 	wg.Wait()
-	fmt.Println("initLocalDevice bottom")
+	log.Println("initLocalDevice bottom")
 }
 
 func gotDevice(d lifxlan.Device) {
 	conn, err := d.Dial()
 	if err != nil {
-		fmt.Println("Device.Dial() error:", err)
+		log.Println("Device.Dial() error:", err)
 		return
 	}
 	defer conn.Close() // Good idea?
 
 	dev, err = light.Wrap(context.Background(), d, false)
 	if err != nil {
-		fmt.Println("light.Wrap error:", err)
+		log.Println("light.Wrap error:", err)
 		return
 	}
 }
 
 func getColor() *lifxlan.Color {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
 	defer cancel()
 	color, err := dev.GetColor(ctx, conn)
 	if err != nil {
-		fmt.Println("GetColor error:", err)
+		log.Println("GetColor error:", err)
 		return nil
 	}
 
@@ -94,11 +98,11 @@ func getColor() *lifxlan.Color {
 }
 
 func setColor(color *lifxlan.Color) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
 	defer cancel()
 	err := dev.SetColor(ctx, conn, color, 75*time.Millisecond, false)
 	if err != nil {
-		fmt.Println("SetColor error:", err)
+		log.Println("SetColor error:", err)
 		return
 	}
 }
@@ -144,21 +148,21 @@ func makeCooler() {
 }
 
 func setPower(pow lifxlan.Power) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
 	defer cancel()
 	err := dev.SetPower(ctx, conn, pow, false)
 	if err != nil {
-		fmt.Println("SetPower error:", err)
+		log.Println("SetPower error:", err)
 		return
 	}
 }
 
 func getPower() (pow lifxlan.Power) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdDeadline)
 	defer cancel()
 	pow, err := dev.GetPower(ctx, conn)
 	if err != nil {
-		fmt.Println("GetPower error:", err)
+		log.Println("GetPower error:", err)
 	}
 
 	return
@@ -170,7 +174,7 @@ func getPower() (pow lifxlan.Power) {
 //	than one, that'll move things like brightness by too much.  Let's do a script to remove and set up fifo on
 //	launch.
 func togglePower() {
-	fmt.Println("togglePower")
+	log.Println("togglePower")
 	if getPower() != lifxlan.PowerOn {
 		setPower(lifxlan.PowerOn)
 	} else {
@@ -197,7 +201,7 @@ func setWhite(k uint16, b float32) {
 func putReq(contentType, body string) {
 	req, err := http.NewRequest(http.MethodPut, lifxStateUrl, strings.NewReader(body))
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Println("Error creating request:", err)
 		return
 	}
 
@@ -206,32 +210,34 @@ func putReq(contentType, body string) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Println("Error doing request:", err)
+		log.Println("Error doing request:", err)
 		return
 	}
 	defer resp.Body.Close()
 }
 
 func main() {
+	log.Printf("Launching")
+
 	sleepDur := 2 * time.Second
 	for sleepDur <= 32*time.Second {
 		initLocalDevice()
-		fmt.Println("initLocalDevice returned")
+		log.Println("initLocalDevice returned...")
 
 		if dev != nil {
 			break
 		}
 
-		fmt.Printf("dev is null, sleeping for %v\n", sleepDur)
+		log.Printf("dev is null, sleeping for %v\n", sleepDur)
 
 		time.Sleep(sleepDur)
 		sleepDur *= 2
 	}
 
 	if dev == nil {
-		panic("Couldn't get a device!")
+		log.Fatal("Couldn't get a device!")
 	} else {
-		fmt.Println("Got lifx device!")
+		log.Println("Got lifx device!")
 	}
 
 	go keys()
@@ -243,22 +249,22 @@ func main() {
 func keys() {
 	f, err := os.Open("/dev/hidraw0")
 	if err != nil {
-		fmt.Printf("Error opening file: %v\n", err)
+		log.Printf("Error opening file: %v\n", err)
 		return
 	}
 	defer f.Close()
 
-	fmt.Println("Opened /dev/hidraw0 for keys")
+	log.Println("Opened /dev/hidraw0 for keys")
 
 	b := make([]byte, 16)
 
 	for {
 		n, err := f.Read(b)
 		if err != nil {
-			fmt.Printf("Error reading file: %v\n", err)
+			log.Printf("Error reading file: %v\n", err)
 			return
 		}
-		fmt.Printf("read %d bytes: %#v\n", n, b)
+		log.Printf("read %d bytes: %#v\n", n, b)
 
 		switch b[2] {
 		case 0x29: // [ESC]
@@ -282,7 +288,7 @@ func keys() {
 		case 0:
 			// ignore
 		default:
-			fmt.Println("keycode:", b[2])
+			log.Println("keycode:", b[2])
 		}
 	}
 }
@@ -290,22 +296,22 @@ func keys() {
 func dial() {
 	f, err := os.Open("/dev/hidraw1")
 	if err != nil {
-		fmt.Printf("Error opening file: %v\n", err)
+		log.Printf("Error opening file: %v\n", err)
 		return
 	}
 	defer f.Close()
 
-	fmt.Println("Opened /dev/hidraw1 for dial")
+	log.Println("Opened /dev/hidraw1 for dial")
 
 	b := make([]byte, 16)
 
 	for {
 		n, err := f.Read(b)
 		if err != nil {
-			fmt.Printf("Error reading file: %v\n", err)
+			log.Printf("Error reading file: %v\n", err)
 			return
 		}
-		fmt.Printf("read %d bytes: %#v\n", n, b)
+		log.Printf("read %d bytes: %#v\n", n, b)
 
 		if b[0] != 0x3 {
 			continue
@@ -319,7 +325,7 @@ func dial() {
 		case 0:
 			// ignore
 		default:
-			fmt.Println("keycode:", b[1])
+			log.Println("keycode:", b[1])
 		}
 	}
 }

@@ -8,4 +8,4 @@
 #mkfifo $fifo
 #cat /dev/input/event0 >>$fifo&
 #cat /dev/input/event1 >>$fifo&
-sudo /home/pi/light-control >>/home/pi/lc-logs
+sudo /home/pi/light-control &>>/home/pi/lc-logs
