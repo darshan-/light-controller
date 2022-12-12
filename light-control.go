@@ -4,23 +4,13 @@ import (
 	"context"
 	"log"
 	"net"
-	"net/http"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/darshan-/lifxlan"
 	"github.com/darshan-/lifxlan/light"
 )
-
-/*
-Disable ttys and X
-*/
-
-// Having first done `mkfifo fifo`
-// cat /dev/input/event0 >>fifo&
-// cat /dev/input/event1 >>fifo&
 
 const (
 	max_brightness  = 65535
@@ -216,38 +206,9 @@ func togglePower() {
 	}
 }
 
-const lifxStateUrl = "https://api.lifx.com/v1/lights/all/state"
-
-func power(state string) {
-	putReq("application/x-www-form-urlencoded", "power="+state)
-}
-
-func putJson(json string) {
-	putReq("application/json", json)
-}
-
 func setWhite(k uint16, b float32) {
-	//putJson(`{"color": "kelvin:` + k + ` brightness:` + b + `", "power": "on"}`)
 	setColor(&lifxlan.Color{Kelvin: k, Brightness: uint16(b * 65535)}, cmdDeadline)
 	setPower(lifxlan.PowerOn, cmdDeadline)
-}
-
-func putReq(contentType, body string) {
-	req, err := http.NewRequest(http.MethodPut, lifxStateUrl, strings.NewReader(body))
-	if err != nil {
-		log.Println("Error creating request:", err)
-		return
-	}
-
-	req.Header.Add("Authorization", "Bearer "+lifx_token)
-	req.Header.Set("Content-Type", contentType)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Println("Error doing request:", err)
-		return
-	}
-	defer resp.Body.Close()
 }
 
 func main() {

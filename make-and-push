@@ -1,0 +1,3 @@
+#!/bin/bash
+
+GOARCH=arm go build light-control.go secret.go && scp light-control run-lc.sh pi@pi:/home/pi/
