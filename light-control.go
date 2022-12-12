@@ -38,19 +38,38 @@ var (
 )
 
 func initLocalDevice() {
-	log.Println("initLocalDevice top")
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	for i := 0; i < 5; i++ {
+		err := doInitLocalDevice()
+		if err == nil {
+			log.Printf("Init complete!")
+			return
+		}
+
+		log.Printf("Discover failed with err: %v", err)
+
+		time.Sleep(5 * time.Second)
+	}
+
+	log.Fatalf("Discover failed too many times!")
+}
+
+func doInitLocalDevice() error {
+	log.Println("doInitLocalDevice...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	deviceChan := make(chan lifxlan.Device)
+
 	var wg sync.WaitGroup
+	var err error
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := lifxlan.Discover(ctx, deviceChan, ""); err != nil {
-			if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
-				log.Fatalf("Discover failed: %v\n", err)
-			}
+
+		err = lifxlan.Discover(ctx, deviceChan, "")
+		if err == context.Canceled {
+			err = nil
 		}
 	}()
 
@@ -58,7 +77,7 @@ func initLocalDevice() {
 		wg.Add(1)
 		go func(device lifxlan.Device) {
 			defer wg.Done()
-			log.Println(device)
+			log.Printf("Discovered device: %v", device)
 			gotDevice(device)
 
 			// I'm not currently looking for more than one device; so just cancel once we get it
@@ -67,7 +86,8 @@ func initLocalDevice() {
 	}
 
 	wg.Wait()
-	log.Println("initLocalDevice bottom")
+
+	return err
 }
 
 func gotDevice(d lifxlan.Device) {
@@ -231,28 +251,9 @@ func putReq(contentType, body string) {
 }
 
 func main() {
-	log.Printf("Launching")
+	log.Printf("-------------------- Initializing --------------------")
 
-	sleepDur := 2 * time.Second
-	for sleepDur <= 32*time.Second {
-		initLocalDevice()
-		log.Println("initLocalDevice returned...")
-
-		if dev != nil {
-			break
-		}
-
-		log.Printf("dev is null, sleeping for %v\n", sleepDur)
-
-		time.Sleep(sleepDur)
-		sleepDur *= 2
-	}
-
-	if dev == nil {
-		log.Fatal("Couldn't get a device!")
-	} else {
-		log.Println("Got lifx device!")
-	}
+	initLocalDevice()
 
 	go keys()
 	go dial()
@@ -290,6 +291,11 @@ func main() {
 // keepAlive getColor anymore, and everything will be perfect, which'd be great.  Or maybe it won't help, and
 // keepAlive will come to the rescue.  Or maybe neithe thing will work, and we'll be down to 15-second delays
 // sometimes, which would suck, but even *that* is an improvement over the status quo.  We'll see.
+
+// Huh, okay, so I was starting to ge my hopse up that wifi power management did the trick, but after 4 hours
+// and 15 minutes, we started getting a bunch of deadlines exceeded again.  But keepAlive does seem to be
+// compensating effectively, so for now switch still seems to work every time I use it.  I still don't like
+// this, because I could still get unlucky, and I hate that, but at least it's a lot better than it was...
 func keepAlive() {
 	for {
 		color := getColor(cmdDeadline)
