@@ -30,7 +30,7 @@ var (
 	quit = make(chan struct{})
 )
 
-func initLocalDevice() {
+func findDevice() {
 	log.Println("Scanning for devices...")
 
 	var d lifxlan.Device
@@ -52,20 +52,22 @@ func initLocalDevice() {
 
 		log.Printf("Discover failed with err: %v", err)
 
+		time.Sleep(time.Duration(i) * time.Second)
+
 		if i > MAX_DISCOVER_ATTEMPTS {
-			log.Fatalf("Discover failed too many times!")
+			log.Panicf("Discover failed too many times!")
 		}
 	}
 
 	var err error
 	conn, err = d.Dial()
 	if err != nil {
-		log.Fatalf("Device.Dial() error: %v", err)
+		log.Panicf("Device.Dial() error: %v", err)
 	}
 
 	dev, err = light.Wrap(context.Background(), d, false)
 	if err != nil {
-		log.Fatalf("light.Wrap error: %v", err)
+		log.Panicf("light.Wrap error: %v", err)
 	}
 
 	log.Printf("Initialization complete!")
@@ -78,9 +80,10 @@ func getColor(deadline time.Duration) *lifxlan.Color {
 	if err != nil {
 		log.Println("GetColor error:", err)
 		if deadline < maxDeadline {
+			time.Sleep(2 * time.Second)
 			return getColor(deadline * 2)
 		} else {
-			log.Fatal("Max deadline exceeded")
+			log.Panicf("Max deadline exceeded")
 		}
 	}
 
@@ -94,9 +97,10 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 	if err != nil {
 		log.Println("SetColor error:", err)
 		if deadline < maxDeadline {
+			time.Sleep(2 * time.Second)
 			setColor(color, deadline)
 		} else {
-			log.Fatal("Max deadline exceeded")
+			log.Panicf("Max deadline exceeded")
 		}
 	}
 }
@@ -148,9 +152,10 @@ func setPower(pow lifxlan.Power, deadline time.Duration) {
 	if err != nil {
 		log.Println("SetPower error:", err)
 		if deadline < maxDeadline {
+			time.Sleep(2 * time.Second)
 			setPower(pow, deadline*2)
 		} else {
-			log.Fatal("Max deadline exceeded")
+			log.Panicf("Max deadline exceeded")
 		}
 	}
 }
@@ -162,9 +167,10 @@ func getPower(deadline time.Duration) (pow lifxlan.Power) {
 	if err != nil {
 		log.Println("GetPower error:", err)
 		if deadline < maxDeadline {
+			time.Sleep(2 * time.Second)
 			return getPower(deadline * 2)
 		} else {
-			log.Fatal("Max deadline exceeded")
+			log.Panicf("Max deadline exceeded")
 		}
 	}
 
@@ -185,10 +191,24 @@ func setWhite(k uint16, b float32) {
 	setPower(lifxlan.PowerOn, cmdDeadline)
 }
 
+// func main() {
+// 	for {
+// 		run()
+// 		log.Print("run() returned; I guess we just recovered from a panic; let's run again...")
+// 	}
+// }
+
 func main() {
+	defer func() {
+		recover()
+		conn.Close()
+		log.Print("Recovered from a panic; let's run again...")
+		main()
+	}()
+
 	log.Printf("-------------------- Initializing --------------------")
 
-	initLocalDevice()
+	findDevice()
 
 	go handleinput("/dev/hidraw0", keys)
 	go handleinput("/dev/hidraw1", dial)
@@ -228,7 +248,7 @@ func handleinput(dev string, handle func([]byte)) {
 			log.Printf("Error reading file: %v\n", err)
 			return
 		}
-		log.Printf("read %d bytes: %d\n", n, b[:n])
+		log.Printf("read %d bytes for handler '%s': %d\n", n, handlerName, b[:n])
 
 		handle(b)
 	}
