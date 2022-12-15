@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/darshan-/lifxlan"
@@ -46,29 +45,23 @@ func initLocalDevice() {
 func doInitLocalDevice() error {
 	log.Println("doInitLocalDevice...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	deviceChan := make(chan lifxlan.Device)
 
-	var wg sync.WaitGroup
-	var derr error
+	var d lifxlan.Device
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
-		derr = lifxlan.Discover(ctx, deviceChan, "")
-		if derr == context.Canceled {
-			derr = nil
-		}
+		d = <- deviceChan
+		cancel()
 	}()
 
-	d := <- deviceChan
+	err := lifxlan.Discover(ctx, deviceChan, "")
+	if err != nil && err != context.Canceled {
+		return err
+	}
+
 	log.Printf("Discovered device: %v", d)
 
-	cancel()
-
-	var err error
 	conn, err = d.Dial()
 	if err != nil {
 		log.Fatalf("Device.Dial() error: %v", err)
@@ -79,9 +72,7 @@ func doInitLocalDevice() error {
 		log.Fatalf("light.Wrap error: %v", err)
 	}
 
-	wg.Wait()
-
-	return derr
+	return nil
 }
 
 func getColor(deadline time.Duration) *lifxlan.Color {
