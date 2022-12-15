@@ -18,6 +18,8 @@ const (
 
 	cmdDeadline = 1 * time.Second
 	maxDeadline = 10 * time.Second
+
+	MAX_DISCOVER_ATTEMPTS = 5
 )
 
 var (
@@ -27,40 +29,33 @@ var (
 )
 
 func initLocalDevice() {
-	for i := 0; i < 5; i++ {
-		err := doInitLocalDevice()
-		if err == nil {
-			log.Printf("Init complete!")
-			return
-		}
-
-		time.Sleep(5 * time.Second)
-	}
-
-	log.Fatalf("Discover failed too many times!")
-}
-
-func doInitLocalDevice() error {
-	log.Println("doInitLocalDevice...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-	deviceChan := make(chan lifxlan.Device)
+	log.Println("initLocalDevice...")
 
 	var d lifxlan.Device
 
-	go func() {
-		d = <- deviceChan
-		cancel()
-	}()
+	for i := 1; ; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i)*2*time.Second)
+		deviceChan := make(chan lifxlan.Device)
 
-	err := lifxlan.Discover(ctx, deviceChan, "") // Control stays here until cancel() is called
-	if err != nil && err != context.Canceled {
+		go func() {
+			d = <-deviceChan // Discover closes chan before returning
+			cancel()         // If we're here because chan was closed, cancel() is still safe to call
+		}()
+
+		err := lifxlan.Discover(ctx, deviceChan, "") // Control stays here until cancel, err, or timeout
+		if err == context.Canceled {
+			log.Printf("Discovered device: %v", d)
+			break
+		}
+
 		log.Printf("Discover failed with err: %v", err)
-		return err
+
+		if i > MAX_DISCOVER_ATTEMPTS {
+			log.Fatalf("Discover failed too many times!")
+		}
 	}
 
-	log.Printf("Discovered device: %v", d)
-
+	var err error
 	conn, err = d.Dial()
 	if err != nil {
 		log.Fatalf("Device.Dial() error: %v", err)
@@ -71,7 +66,7 @@ func doInitLocalDevice() error {
 		log.Fatalf("light.Wrap error: %v", err)
 	}
 
-	return nil
+	log.Printf("Init complete!")
 }
 
 func getColor(deadline time.Duration) *lifxlan.Color {
