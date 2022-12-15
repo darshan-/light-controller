@@ -34,8 +34,6 @@ func initLocalDevice() {
 			return
 		}
 
-		log.Printf("Discover failed with err: %v", err)
-
 		time.Sleep(5 * time.Second)
 	}
 
@@ -55,8 +53,9 @@ func doInitLocalDevice() error {
 		cancel()
 	}()
 
-	err := lifxlan.Discover(ctx, deviceChan, "")
+	err := lifxlan.Discover(ctx, deviceChan, "") // Control stays here until cancel() is called
 	if err != nil && err != context.Canceled {
+		log.Printf("Discover failed with err: %v", err)
 		return err
 	}
 
