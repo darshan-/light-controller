@@ -51,46 +51,37 @@ func doInitLocalDevice() error {
 	deviceChan := make(chan lifxlan.Device)
 
 	var wg sync.WaitGroup
-	var err error
+	var derr error
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
-		err = lifxlan.Discover(ctx, deviceChan, "")
-		if err == context.Canceled {
-			err = nil
+		derr = lifxlan.Discover(ctx, deviceChan, "")
+		if derr == context.Canceled {
+			derr = nil
 		}
 	}()
 
-	for device := range deviceChan {
-		wg.Add(1)
-		go func(device lifxlan.Device) {
-			defer wg.Done()
-			log.Printf("Discovered device: %v", device)
-			gotDevice(device)
+	d := <- deviceChan
+	log.Printf("Discovered device: %v", d)
 
-			// I'm not currently looking for more than one device; so just cancel once we get it
-			cancel()
-		}(device)
-	}
+	cancel()
 
-	wg.Wait()
-
-	return err
-}
-
-func gotDevice(d lifxlan.Device) {
-	conn, err := d.Dial()
+	var err error
+	conn, err = d.Dial()
 	if err != nil {
 		log.Fatalf("Device.Dial() error: %v", err)
 	}
-	defer conn.Close() // Good idea?
 
 	dev, err = light.Wrap(context.Background(), d, false)
 	if err != nil {
 		log.Fatalf("light.Wrap error: %v", err)
 	}
+
+	wg.Wait()
+
+	return derr
 }
 
 func getColor(deadline time.Duration) *lifxlan.Color {
