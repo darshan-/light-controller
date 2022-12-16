@@ -15,13 +15,13 @@ import (
 
 const (
 	max_brightness  = 65535
-	brightness_step = 2185 // 1/30 of range // 1966 // 3% of max
+	brightness_step = 2185 // 1/30 of range
 	kelvin_step     = 250  // 1/30 of range
 
 	cmdDeadline = 1 * time.Second
 	maxDeadline = 10 * time.Second
 
-	MAX_DISCOVER_ATTEMPTS = 5
+	MAX_DISCOVER_ATTEMPTS = 10
 )
 
 var (
@@ -87,6 +87,10 @@ func getColor(deadline time.Duration) *lifxlan.Color {
 		}
 	}
 
+	if err == nil && deadline > cmdDeadline {
+		log.Printf("GetColor success after previous error")
+	}
+
 	return color
 }
 
@@ -102,6 +106,10 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 		} else {
 			log.Panicf("Max deadline exceeded")
 		}
+	}
+
+	if err == nil && deadline > cmdDeadline {
+		log.Printf("SetColor success after previous error")
 	}
 }
 
@@ -158,6 +166,10 @@ func setPower(pow lifxlan.Power, deadline time.Duration) {
 			log.Panicf("Max deadline exceeded")
 		}
 	}
+
+	if err == nil && deadline > cmdDeadline {
+		log.Printf("SetPower success after previous error")
+	}
 }
 
 func getPower(deadline time.Duration) (pow lifxlan.Power) {
@@ -172,6 +184,10 @@ func getPower(deadline time.Duration) (pow lifxlan.Power) {
 		} else {
 			log.Panicf("Max deadline exceeded")
 		}
+	}
+
+	if err == nil && deadline > cmdDeadline {
+		log.Printf("GetPower success after previous error")
 	}
 
 	return
@@ -191,14 +207,9 @@ func setWhite(k uint16, b float32) {
 	setPower(lifxlan.PowerOn, cmdDeadline)
 }
 
-// func main() {
-// 	for {
-// 		run()
-// 		log.Print("run() returned; I guess we just recovered from a panic; let's run again...")
-// 	}
-// }
-
 func main() {
+	log.SetFlags(log.Ldate | log.Lmicroseconds)
+
 	defer func() {
 		recover()
 		conn.Close()
@@ -212,21 +223,8 @@ func main() {
 
 	go handleinput("/dev/hidraw0", keys)
 	go handleinput("/dev/hidraw1", dial)
-	go keepAlive()
 
 	<-quit
-}
-
-// If not closing connection realy does fix things, then let's get rid of this at some point...
-func keepAlive() {
-	for {
-		color := getColor(cmdDeadline)
-		if color == nil {
-			log.Printf("----- keepAlive couldn't reach light!")
-		}
-
-		time.Sleep(4 * time.Second)
-	}
 }
 
 func handleinput(dev string, handle func([]byte)) {
