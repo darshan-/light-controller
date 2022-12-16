@@ -221,8 +221,8 @@ func main() {
 
 	findDevice()
 
-	go handleinput("/dev/hidraw0", keys)
-	go handleinput("/dev/hidraw1", dial)
+	go handleInput("/dev/hidraw0", keys)
+	go handleInput("/dev/hidraw1", dial)
 	go pingLight()
 
 	<-quit
@@ -247,11 +247,11 @@ func pingLight() {
 	}
 }
 
-func handleinput(dev string, handle func([]byte)) {
+func handleInput(dev string, handle func([]byte)) {
 	defer func() {
 		recover()
-		log.Print("handleinput recovered from a panic; let's run again...")
-		handleinput(dev, handle)
+		log.Print("handleInput recovered from a panic; let's run again...")
+		handleInput(dev, handle)
 	}()
 
 	f, err := os.Open(dev)
