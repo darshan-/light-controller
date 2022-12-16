@@ -223,8 +223,22 @@ func main() {
 
 	go handleinput("/dev/hidraw0", keys)
 	go handleinput("/dev/hidraw1", dial)
+	go pingLight()
 
 	<-quit
+}
+
+// I'd like to get rid of this at some point, but for now I want to regularly talk to light
+// and log what happens.
+func pingLight() {
+	for {
+		color := getColor(cmdDeadline)
+		if color == nil {
+			log.Printf("----- keepAlive couldn't reach light!")
+		}
+
+		time.Sleep(4 * time.Second)
+	}
 }
 
 func handleinput(dev string, handle func([]byte)) {
