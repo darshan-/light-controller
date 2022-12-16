@@ -231,6 +231,12 @@ func main() {
 // I'd like to get rid of this at some point, but for now I want to regularly talk to light
 // and log what happens.
 func pingLight() {
+	defer func() {
+		recover()
+		log.Print("pingLight recovered from a panic; let's run again...")
+		pingLight()
+	}()
+
 	for {
 		color := getColor(cmdDeadline)
 		if color == nil {
@@ -242,6 +248,12 @@ func pingLight() {
 }
 
 func handleinput(dev string, handle func([]byte)) {
+	defer func() {
+		recover()
+		log.Print("handleinput recovered from a panic; let's run again...")
+		handleinput(dev, handle)
+	}()
+
 	f, err := os.Open(dev)
 	if err != nil {
 		log.Printf("Error opening file '%s': %v\n", dev, err)
