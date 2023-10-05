@@ -13,6 +13,12 @@ import (
 	"github.com/darshan-/lifxlan/light"
 )
 
+// Build (and copy to pi) with:
+//   GOARCH=arm go build light-control.go secret.go && scp light-control pi@pi:/home/pi/
+//
+// First need to stop on pi with:
+//   sudo systemctl stop light-control
+
 const (
 	max_brightness  = 65535
 	brightness_step = 2185 // 1/30 of range
@@ -371,10 +377,12 @@ func keys(k []byte) {
 		makeWarmer()
 	case 0x3e: // F5 (>>)
 		makeCooler()
+	case 0x17: // [T]
+		setWhite(2000, 1)
 	case 0:
 		// ignore
 	default:
-		log.Println("unhandled keycode:", k[2])
+		log.Printf("unhandled keycode: 0x%x\n", k[2])
 	}
 }
 
