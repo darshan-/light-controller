@@ -22,63 +22,103 @@ const (
 	maxDeadline = 10 * time.Second
 
 	MAX_DISCOVER_ATTEMPTS = 10
+
+	MAX_DEVICES = 2 // Number of devices I have on the network; wait to find this many if possible
 )
 
 var (
-	dev  light.Device
-	conn net.Conn
-	quit = make(chan struct{})
+	devs  []light.Device
+	conns []net.Conn
+	quit  = make(chan struct{})
 )
 
-func findDevice() {
-	log.Println("Scanning for devices...")
+func findDevices() {
+	log.Printf("Scanning for %v devices...", MAX_DEVICES)
 
-	var d lifxlan.Device
+	var found []lifxlan.Device
 
 	for i := 1; ; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(i)*2*time.Second)
 		deviceChan := make(chan lifxlan.Device)
 
 		go func() {
-			d = <-deviceChan // Discover closes chan before returning
-			cancel()         // If we're here because chan was closed, cancel() is still safe to call
+			for {
+				d := <-deviceChan // Discover closes chan before returning
+
+				if d == nil {
+					// deviceChan must be closed -- presumably timeout occured (or other error); just exit goroutine.
+					return
+				}
+
+				log.Printf("Found one: %v", d)
+
+				found = append(found, d)
+
+				log.Printf("Number of devices found so far: %v", len(found))
+
+				if len(found) == MAX_DEVICES {
+					log.Printf("Great!  We've found all %v devices.  Continuing...", MAX_DEVICES)
+
+					cancel() // Note: If we're here because chan was closed, cancel() is still safe to call
+					return
+				}
+			}
 		}()
 
 		err := lifxlan.Discover(ctx, deviceChan, "") // Control stays here until cancel, err, or timeout
 		if err == context.Canceled {
-			log.Printf("Discovered device: %v", d)
+			log.Printf("Discovered all %v devices: %v", MAX_DEVICES, found)
 			break
 		}
 
 		log.Printf("Discover failed with err: %v", err)
 
+		// TODO: Set up for continuous scanning, so we an add and remove devices dynamically...
+		if len(found) > 0 {
+			log.Printf("However, we have %v devices, so we'll continue", len(found))
+			break
+		}
+
+		found = nil
+
 		time.Sleep(time.Duration(i) * time.Second)
 
-		if i > MAX_DISCOVER_ATTEMPTS {
+		if i >= MAX_DISCOVER_ATTEMPTS {
 			log.Panicf("Discover failed too many times!")
 		}
 	}
 
-	var err error
-	conn, err = d.Dial()
-	if err != nil {
-		log.Panicf("Device.Dial() error: %v", err)
-	}
+	for i, d := range found {
+		log.Printf("Dialing and wrapping device %v of %v: %v", i+1, len(found), d)
 
-	dev, err = light.Wrap(context.Background(), d, false)
-	if err != nil {
-		log.Panicf("light.Wrap error: %v", err)
+		conn, err := d.Dial()
+		if err != nil {
+			log.Panicf("Device.Dial() error: %v", err)
+		}
+
+		dev, err := light.Wrap(context.Background(), d, false)
+		if err != nil {
+			log.Panicf("light.Wrap error: %v", err)
+		}
+
+		conns = append(conns, conn)
+		devs = append(devs, dev)
 	}
 
 	log.Printf("Initialization complete!")
 }
 
 func getColor(deadline time.Duration) *lifxlan.Color {
+	dev := devs[0]
+	conn := conns[0]
+
 	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
+
 	color, err := dev.GetColor(ctx, conn)
 	if err != nil {
 		log.Println("GetColor error:", err)
+
 		if deadline < maxDeadline {
 			time.Sleep(2 * time.Second)
 			return getColor(deadline * 2)
@@ -95,89 +135,116 @@ func getColor(deadline time.Duration) *lifxlan.Color {
 }
 
 func setColor(color *lifxlan.Color, deadline time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), deadline)
-	defer cancel()
-	err := dev.SetColor(ctx, conn, color, 75*time.Millisecond, false)
-	if err != nil {
-		log.Println("SetColor error:", err)
-		if deadline < maxDeadline {
-			time.Sleep(2 * time.Second)
-			setColor(color, deadline)
-		} else {
-			log.Panicf("Max deadline exceeded")
-		}
-	}
+	for i, conn := range conns {
+		dev := devs[i]
 
-	if err == nil && deadline > cmdDeadline {
-		log.Printf("SetColor success after previous error")
+		ctx, cancel := context.WithTimeout(context.Background(), deadline)
+		defer cancel()
+
+		err := dev.SetColor(ctx, conn, color, 75*time.Millisecond, false)
+		if err != nil {
+			log.Println("SetColor error:", err)
+
+			if deadline < maxDeadline {
+				time.Sleep(2 * time.Second)
+				setColor(color, deadline)
+			} else {
+				log.Panicf("Max deadline exceeded")
+			}
+		}
+
+		if err == nil && deadline > cmdDeadline {
+			log.Printf("SetColor success after previous error")
+		}
 	}
 }
 
 func makeDimmer() {
+	log.Printf("dim!")
 	color := getColor(cmdDeadline)
+
 	if color.Brightness <= brightness_step {
 		color.Brightness = 0
 	} else {
 		color.Brightness -= brightness_step
 	}
+
 	setColor(color, cmdDeadline)
 }
 
 func makeBrighter() {
+	log.Printf("bright!")
 	color := getColor(cmdDeadline)
+
 	if color.Brightness >= max_brightness-brightness_step {
 		color.Brightness = max_brightness
 	} else {
 		color.Brightness += brightness_step
 	}
+
 	setColor(color, cmdDeadline)
 }
 
 func makeWarmer() {
 	color := getColor(cmdDeadline)
+
 	if color.Kelvin <= lifxlan.KelvinMin+kelvin_step {
 		color.Kelvin = lifxlan.KelvinMin
 	} else {
 		color.Kelvin -= kelvin_step
 	}
+
 	setColor(color, cmdDeadline)
 }
 
 func makeCooler() {
 	color := getColor(cmdDeadline)
+
 	if color.Kelvin >= lifxlan.KelvinMax-kelvin_step {
 		color.Kelvin = lifxlan.KelvinMax
 	} else {
 		color.Kelvin += kelvin_step
 	}
+
 	setColor(color, cmdDeadline)
 }
 
 func setPower(pow lifxlan.Power, deadline time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), deadline)
-	defer cancel()
-	err := dev.SetPower(ctx, conn, pow, false)
-	if err != nil {
-		log.Println("SetPower error:", err)
-		if deadline < maxDeadline {
-			time.Sleep(2 * time.Second)
-			setPower(pow, deadline*2)
-		} else {
-			log.Panicf("Max deadline exceeded")
-		}
-	}
+	for i, conn := range conns {
+		dev := devs[i]
 
-	if err == nil && deadline > cmdDeadline {
-		log.Printf("SetPower success after previous error")
+		ctx, cancel := context.WithTimeout(context.Background(), deadline)
+		defer cancel()
+
+		err := dev.SetPower(ctx, conn, pow, false)
+		if err != nil {
+			log.Println("SetPower error:", err)
+
+			if deadline < maxDeadline {
+				time.Sleep(2 * time.Second)
+				setPower(pow, deadline*2)
+			} else {
+				log.Panicf("Max deadline exceeded")
+			}
+		}
+
+		if err == nil && deadline > cmdDeadline {
+			log.Printf("SetPower success after previous error")
+		}
 	}
 }
 
 func getPower(deadline time.Duration) (pow lifxlan.Power) {
+	dev := devs[0]
+	conn := conns[0]
+
 	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
+
 	pow, err := dev.GetPower(ctx, conn)
 	if err != nil {
 		log.Println("GetPower error:", err)
+
 		if deadline < maxDeadline {
 			time.Sleep(2 * time.Second)
 			return getPower(deadline * 2)
@@ -195,6 +262,7 @@ func getPower(deadline time.Duration) (pow lifxlan.Power) {
 
 func togglePower() {
 	log.Println("togglePower")
+
 	if getPower(cmdDeadline) != lifxlan.PowerOn {
 		setPower(lifxlan.PowerOn, cmdDeadline)
 	} else {
@@ -212,14 +280,19 @@ func main() {
 
 	defer func() {
 		recover()
-		conn.Close()
+
+		for _, conn := range conns {
+			conn.Close()
+		}
+
 		log.Print("Recovered from a panic; let's run again...")
+
 		main()
 	}()
 
 	log.Printf("-------------------- Initializing --------------------")
 
-	findDevice()
+	findDevices()
 
 	go handleInput("/dev/hidraw0", keys)
 	go handleInput("/dev/hidraw1", dial)
