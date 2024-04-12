@@ -204,6 +204,21 @@ func setBrightness(b float64) {
 	setColor(color, cmdDeadline)
 }
 
+// temp t in range 0 - 1
+func setColorTemp(t float64) {
+	color := getColor(cmdDeadline)
+
+	if t < 0 {
+		t = 0
+	} else if t > 1 {
+		t = 1
+	}
+
+	color.Kelvin = lifxlan.KelvinMin + uint16(float64(lifxlan.KelvinMax - lifxlan.KelvinMin) * t)
+
+	setColor(color, cmdDeadline)
+}
+
 func makeWarmer() {
 	color := getColor(cmdDeadline)
 
@@ -392,18 +407,32 @@ func keys(k []byte) {
 	// 	makeCooler()
 	case 0x17: // [T]
 		setWhite(2000, 1)
-	case 0x3a: // G1 / paddle up
+	case 0x3a: // [G1] / paddle up
 		makeBrighter()
-	case 0x2c: // -- / paddle down
+	case 0x2c: // [--] / paddle down
 		makeDimmer()
-	case 0x3b: // G2
+	case 0x3b: // [G2]
 		setBrightness(1.0)
-	case 0x3c: // G3
+	case 0x3c: // [G3]
 		setBrightness(0.7)
-	case 0x3d: // G4
+	case 0x3d: // [G4]
 		setBrightness(0.4)
-	case 0x3e: // G5
+	case 0x3e: // [G5]
 		setBrightness(0.1)
+	case 0x1d: // [Z]
+		setColorTemp(0.0)
+	case 0x1b: // [X]
+		setColorTemp(0.25)
+	case 0x06: // [C]
+		setColorTemp(0.5)
+	case 0x19: // [V]
+		setColorTemp(0.75)
+	case 0x05: // [B]
+		setColorTemp(1.0)
+	case 0x11: // [N]
+		makeWarmer()
+	case 0x13: // [P]
+		makeCooler()
 	case 0:
 		// ignore
 	default:
