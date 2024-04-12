@@ -166,7 +166,6 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 }
 
 func makeDimmer() {
-	log.Printf("dim!")
 	color := getColor(cmdDeadline)
 
 	if color.Brightness <= brightness_step {
@@ -179,7 +178,6 @@ func makeDimmer() {
 }
 
 func makeBrighter() {
-	log.Printf("bright!")
 	color := getColor(cmdDeadline)
 
 	if color.Brightness >= max_brightness-brightness_step {
@@ -187,6 +185,21 @@ func makeBrighter() {
 	} else {
 		color.Brightness += brightness_step
 	}
+
+	setColor(color, cmdDeadline)
+}
+
+// brightness b in range 0 - 1
+func setBrightness(b float64) {
+	color := getColor(cmdDeadline)
+
+	if b < 0 {
+		b = 0
+	} else if b > 1 {
+		b = 1
+	}
+
+	color.Brightness = uint16(max_brightness * b)
 
 	setColor(color, cmdDeadline)
 }
@@ -373,16 +386,24 @@ func keys(k []byte) {
 		setWhite(4300, 1)
 	case 0x23: // [6]
 		setWhite(5200, 1)
-	case 0x3d: // F4 (<<)
-		makeWarmer()
-	case 0x3e: // F5 (>>)
-		makeCooler()
+	// case 0x3d: // F4 (<<)
+	// 	makeWarmer()
+	// case 0x3e: // F5 (>>)
+	// 	makeCooler()
 	case 0x17: // [T]
 		setWhite(2000, 1)
 	case 0x3a: // G1 / paddle up
 		makeBrighter()
 	case 0x2c: // -- / paddle down
 		makeDimmer()
+	case 0x3b: // G2
+		setBrightness(1.0)
+	case 0x3c: // G3
+		setBrightness(0.7)
+	case 0x3d: // G4
+		setBrightness(0.4)
+	case 0x3e: // G5
+		setBrightness(0.1)
 	case 0:
 		// ignore
 	default:
