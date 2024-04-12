@@ -301,7 +301,7 @@ func main() {
 	findDevices()
 
 	go handleInput("/dev/hidraw0", keys)
-	go handleInput("/dev/hidraw1", dial)
+	go handleInput("/dev/hidraw1", dial) // Probably won't need anymore?  There are both...
 	go pingLight()
 
 	<-quit
@@ -379,6 +379,10 @@ func keys(k []byte) {
 		makeCooler()
 	case 0x17: // [T]
 		setWhite(2000, 1)
+	case 0x3a: // G1 / paddle up
+		makeBrighter()
+	case 0x2c: // -- / paddle down
+		makeDimmer()
 	case 0:
 		// ignore
 	default:
