@@ -21,6 +21,7 @@ import (
 
 const (
 	max_brightness  = 65535
+	min_brightness  = 328  // Minimum brightness that is still on (327 shuts lamp off)
 	brightness_step = 2185 // 1/30 of range
 	kelvin_step     = 250  // 1/30 of range
 
@@ -185,6 +186,14 @@ func makeBrighter() {
 	} else {
 		color.Brightness += brightness_step
 	}
+
+	setColor(color, cmdDeadline)
+}
+
+func setMinBrightness() {
+	color := getColor(cmdDeadline)
+
+	color.Brightness = uint16(min_brightness)
 
 	setColor(color, cmdDeadline)
 }
@@ -414,11 +423,11 @@ func keys(k []byte) {
 	case 0x3b: // [G2]
 		setBrightness(1.0)
 	case 0x3c: // [G3]
-		setBrightness(0.7)
+		setBrightness(0.58)
 	case 0x3d: // [G4]
-		setBrightness(0.4)
+		setBrightness(0.28)
 	case 0x3e: // [G5]
-		setBrightness(0.1)
+		setMinBrightness()
 	case 0x1d: // [Z]
 		setColorTemp(0.0)
 	case 0x1b: // [X]
