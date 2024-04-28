@@ -401,7 +401,6 @@ func handleInput(dev string, handle func(byte)) {
 func repeater(keyDown chan byte, handle func(byte)) {
 	var key byte
 
-	// Need to be able to refer to channels (.C) in select below
 	ticker := &time.Ticker{}
 	timer := &time.Timer{}
 
@@ -415,9 +414,11 @@ func repeater(keyDown chan byte, handle func(byte)) {
 				handle(key)
 				timer = time.NewTimer(time.Millisecond * 500)
 			}
+
 		case <-timer.C:
 			handle(key)
 			ticker = time.NewTicker(time.Millisecond * 200)
+
 		case <-ticker.C:
 			handle(key)
 		}
