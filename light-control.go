@@ -41,6 +41,16 @@ var (
 	cachedColor *lifxlan.Color // To be used for key repeats, otherwise still want to read current value
 )
 
+// TODO: Hmm, cachedColor seems to be working in practice, but I think I'm using it from multiple goroutines, so
+// it should technically be wrapped in a Mutex or otherwise protected.  In practice, it's hard to see multiple
+// threads reading or writing it at the same time, but I'm still pretty sure this is technically wrong.
+
+// Ah, okay, I was thinking, let's just talk to the light on only one goroutine, but already repeater's goroutine
+// is the only one calling the key handler, so other than ping, we're already there!  And while ping does call
+// getColor, it only ever does so with useCached set to false, so the condition fails out and useCached is never
+// read, even for the nil check.  So I believe this is technically correct, although I'm guessing some or most
+// engineers might consider it bad form.
+
 func findDevices() {
 	log.Printf("Scanning for %v devices...", MAX_DEVICES)
 
@@ -179,14 +189,6 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 }
 
 func makeDimmer(isRepeat bool) {
-	// var color *lifxlan.Color
-	// if isRepeat {
-	// 	log.Printf("Using cached color")
-	// 	color = cachedColor
-	// } else {
-	// 	log.Printf("Getting current color")
-	// 	color = getColor(cmdDeadline)
-	// }
 	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Brightness <= brightness_step {
@@ -199,14 +201,6 @@ func makeDimmer(isRepeat bool) {
 }
 
 func makeBrighter(isRepeat bool) {
-	// var color *lifxlan.Color
-	// if isRepeat {
-	// 	log.Printf("Using cached color")
-	// 	color = cachedColor
-	// } else {
-	// 	log.Printf("Getting current color")
-	// 	color = getColor(cmdDeadline)
-	// }
 	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Brightness >= max_brightness-brightness_step {
@@ -257,14 +251,6 @@ func setColorTemp(t float64) {
 }
 
 func makeWarmer(isRepeat bool) {
-	// var color *lifxlan.Color
-	// if isRepeat {
-	// 	log.Printf("Using cached color")
-	// 	color = cachedColor
-	// } else {
-	// 	log.Printf("Getting current color")
-	// 	color = getColor(cmdDeadline)
-	// }
 	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Kelvin <= lifxlan.KelvinMin+kelvin_step {
@@ -277,14 +263,6 @@ func makeWarmer(isRepeat bool) {
 }
 
 func makeCooler(isRepeat bool) {
-	// var color *lifxlan.Color
-	// if isRepeat {
-	// 	log.Printf("Using cached color")
-	// 	color = cachedColor
-	// } else {
-	// 	log.Printf("Getting current color")
-	// 	color = getColor(cmdDeadline)
-	// }
 	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Kelvin >= lifxlan.KelvinMax-kelvin_step {
