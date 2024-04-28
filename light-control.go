@@ -168,7 +168,9 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 		ctx, cancel := context.WithTimeout(context.Background(), deadline)
 		defer cancel()
 
+		start := time.Now()
 		err := dev.SetColor(ctx, conn, color, 75*time.Millisecond, false)
+		log.Printf("SetColor call took %v", time.Since(start))
 		if err != nil {
 			log.Println("SetColor error:", err)
 
@@ -394,7 +396,7 @@ func handleInput(dev string, handle func(byte, bool)) {
 
 	f, err := os.Open(dev)
 	if err != nil {
-		log.Printf("Error opening file '%s': %v\n", dev, err)
+		log.Printf("Error opening file '%s': %v", dev, err)
 		return
 	}
 	defer f.Close()
@@ -411,10 +413,10 @@ func handleInput(dev string, handle func(byte, bool)) {
 	for {
 		n, err := f.Read(b)
 		if err != nil {
-			log.Printf("Error reading file: %v\n", err)
+			log.Printf("Error reading file: %v", err)
 			return
 		}
-		log.Printf("read %d bytes for handler '%s': %d\n", n, handlerName, b[:n])
+		log.Printf("read %d bytes for handler '%s': %d", n, handlerName, b[:n])
 
 		keyDown <- b[2]
 	}
@@ -434,12 +436,12 @@ func repeater(keyDown chan byte, handle func(byte, bool)) {
 				timer.Stop()
 			} else {
 				handle(key, false)
-				timer = time.NewTimer(time.Millisecond * 500)
+				timer = time.NewTimer(time.Millisecond * 350)
 			}
 
 		case <-timer.C:
 			handle(key, true)
-			ticker = time.NewTicker(time.Millisecond * 100)
+			ticker = time.NewTicker(time.Millisecond * 50)
 
 		case <-ticker.C:
 			handle(key, true)
@@ -458,7 +460,7 @@ func repeater(keyDown chan byte, handle func(byte, bool)) {
 // it released when that slot is 0.
 
 func keys(k byte, isRepeat bool) {
-	log.Printf("Read (or repeating) key code: %v\n", k)
+	log.Printf("Read (or repeating) key code: %v", k)
 
 	switch k {
 	case 0x29: // [ESC]
@@ -510,7 +512,7 @@ func keys(k byte, isRepeat bool) {
 	case 0:
 		// ignore
 	default:
-		log.Printf("unhandled keycode: 0x%x\n", k)
+		log.Printf("unhandled keycode: 0x%x", k)
 	}
 }
 
