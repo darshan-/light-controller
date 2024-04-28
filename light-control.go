@@ -338,7 +338,7 @@ func main() {
 	findDevices()
 
 	go handleInput("/dev/hidraw0", keys)
-	go handleInput("/dev/hidraw1", dial) // Probably won't need anymore?  There are both...
+	//go handleInput("/dev/hidraw1", dial) // Probably won't need anymore?  There are both...
 	go pingLight()
 
 	<-quit
@@ -363,7 +363,7 @@ func pingLight() {
 	}
 }
 
-func handleInput(dev string, handle func([]byte)) {
+func handleInput(dev string, handle func(byte)) {
 	defer func() {
 		recover()
 		log.Print("handleInput recovered from a panic; let's run again...")
@@ -376,6 +376,10 @@ func handleInput(dev string, handle func([]byte)) {
 		return
 	}
 	defer f.Close()
+
+	keyDown := make(chan byte, 256)
+
+	go repeater(keyDown, handle)
 
 	handlerName := runtime.FuncForPC(reflect.ValueOf(handle).Pointer()).Name()[5:]
 	log.Printf("Opened %s with handler: %s", dev, handlerName)
@@ -390,12 +394,50 @@ func handleInput(dev string, handle func([]byte)) {
 		}
 		log.Printf("read %d bytes for handler '%s': %d\n", n, handlerName, b[:n])
 
-		handle(b)
+		keyDown <- b[2]
 	}
 }
 
-func keys(k []byte) {
-	switch k[2] {
+func repeater(keyDown chan byte, handle func(byte)) {
+	var key byte
+
+	// Need to be able to refer to channels (.C) in select below
+	ticker := &time.Ticker{}
+	timer := &time.Timer{}
+
+	for {
+		select {
+		case key = <-keyDown:
+			if key == 0 {
+				ticker.Stop()
+				timer.Stop()
+			} else {
+				handle(key)
+				timer = time.NewTimer(time.Millisecond * 500)
+			}
+		case <-timer.C:
+			handle(key)
+			ticker = time.NewTicker(time.Millisecond * 200)
+		case <-ticker.C:
+			handle(key)
+		}
+	}
+}
+
+// Seems like we have 2 bytes of 0 followed by a list of the keys that are
+// currently down.  Not sure if all 14 are that or if there are other things
+// after the keys list.  But in the typical case it's all 0s except for the
+// single down key in the third slot (index 2), and then all 0s when that key
+// is released.
+
+// At least for now, I'm going to explicitly not handle key combinations, and just
+// always look at index 2 to see what single key is considered down, and consider
+// it released when that slot is 0.
+
+func keys(k byte) {
+	log.Printf("Read (or repeating) key code: %v\n", k)
+
+	switch k {
 	case 0x29: // [ESC]
 		togglePower()
 	case 0x1e: // [1]
@@ -445,23 +487,23 @@ func keys(k []byte) {
 	case 0:
 		// ignore
 	default:
-		log.Printf("unhandled keycode: 0x%x\n", k[2])
+		log.Printf("unhandled keycode: 0x%x\n", k)
 	}
 }
 
-func dial(k []byte) {
-	if k[0] != 0x3 {
-		return
-	}
+// func dial(k byte) {
+// 	if k[0] != 0x3 {
+// 		return
+// 	}
 
-	switch k[1] {
-	case 0xe9: // dial right
-		makeBrighter()
-	case 0xea: // dial left
-		makeDimmer()
-	case 0:
-		// ignore
-	default:
-		log.Println("keycode:", k[1])
-	}
-}
+// 	switch k[1] {
+// 	case 0xe9: // dial right
+// 		makeBrighter()
+// 	case 0xea: // dial left
+// 		makeDimmer()
+// 	case 0:
+// 		// ignore
+// 	default:
+// 		log.Println("keycode:", k[1])
+// 	}
+// }
