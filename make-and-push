@@ -1,3 +1,26 @@
 #!/bin/bash
 
-GOARCH=arm go build light-control.go secret.go && scp light-control run-lc.sh pi@pi:/home/pi/
+# Ideally we don't do start and last echo if build failed.
+
+# GOARCH=arm go build light-control.go secret.go &&
+#     ssh pi@pi sudo systemctl stop light-control &&
+#     scp light-control run-lc.sh pi@pi:/home/pi/
+
+# ssh pi@pi sudo systemctl start light-control && echo "light-control restarted"
+
+
+
+# Okay, this still isn't perfect (What if stop fails?  What if scp fails?), but it's better and probably
+# good enough in practice.
+
+function push_and_run() {
+    ssh pi@pi sudo systemctl stop light-control &&
+        scp light-control run-lc.sh pi@pi:/home/pi/
+
+    ssh pi@pi sudo systemctl start light-control &&
+        echo "light-control restarted"
+
+    return 0
+}
+
+GOARCH=arm go build light-control.go secret.go && push_and_run

@@ -37,6 +37,8 @@ var (
 	devs  []light.Device
 	conns []net.Conn
 	quit  = make(chan struct{})
+
+	cachedColor *lifxlan.Color // To be used for key repeats, otherwise still want to read current value
 )
 
 func findDevices() {
@@ -115,20 +117,28 @@ func findDevices() {
 	log.Printf("Initialization complete!")
 }
 
-func getColor(deadline time.Duration) *lifxlan.Color {
+func getColor(deadline time.Duration, useCached bool) *lifxlan.Color {
+	if useCached && cachedColor != nil {
+		log.Printf("Returning cached color")
+
+		return cachedColor
+	}
+
 	dev := devs[0]
 	conn := conns[0]
 
 	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 
+	start := time.Now()
 	color, err := dev.GetColor(ctx, conn)
+	log.Printf("GetColor call took %v", time.Since(start))
 	if err != nil {
 		log.Println("GetColor error:", err)
 
 		if deadline < maxDeadline {
 			time.Sleep(2 * time.Second)
-			return getColor(deadline * 2)
+			return getColor(deadline * 2, useCached)
 		} else {
 			log.Panicf("Max deadline exceeded")
 		}
@@ -158,6 +168,8 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 			} else {
 				log.Panicf("Max deadline exceeded")
 			}
+		} else {
+			cachedColor = color
 		}
 
 		if err == nil && deadline > cmdDeadline {
@@ -166,8 +178,16 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 	}
 }
 
-func makeDimmer() {
-	color := getColor(cmdDeadline)
+func makeDimmer(isRepeat bool) {
+	// var color *lifxlan.Color
+	// if isRepeat {
+	// 	log.Printf("Using cached color")
+	// 	color = cachedColor
+	// } else {
+	// 	log.Printf("Getting current color")
+	// 	color = getColor(cmdDeadline)
+	// }
+	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Brightness <= brightness_step {
 		color.Brightness = 0
@@ -178,8 +198,16 @@ func makeDimmer() {
 	setColor(color, cmdDeadline)
 }
 
-func makeBrighter() {
-	color := getColor(cmdDeadline)
+func makeBrighter(isRepeat bool) {
+	// var color *lifxlan.Color
+	// if isRepeat {
+	// 	log.Printf("Using cached color")
+	// 	color = cachedColor
+	// } else {
+	// 	log.Printf("Getting current color")
+	// 	color = getColor(cmdDeadline)
+	// }
+	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Brightness >= max_brightness-brightness_step {
 		color.Brightness = max_brightness
@@ -191,7 +219,7 @@ func makeBrighter() {
 }
 
 func setMinBrightness() {
-	color := getColor(cmdDeadline)
+	color := getColor(cmdDeadline, false)
 
 	color.Brightness = uint16(min_brightness)
 
@@ -200,7 +228,7 @@ func setMinBrightness() {
 
 // brightness b in range 0 - 1
 func setBrightness(b float64) {
-	color := getColor(cmdDeadline)
+	color := getColor(cmdDeadline, false)
 
 	if b < 0 {
 		b = 0
@@ -215,7 +243,7 @@ func setBrightness(b float64) {
 
 // temp t in range 0 - 1
 func setColorTemp(t float64) {
-	color := getColor(cmdDeadline)
+	color := getColor(cmdDeadline, false)
 
 	if t < 0 {
 		t = 0
@@ -228,8 +256,16 @@ func setColorTemp(t float64) {
 	setColor(color, cmdDeadline)
 }
 
-func makeWarmer() {
-	color := getColor(cmdDeadline)
+func makeWarmer(isRepeat bool) {
+	// var color *lifxlan.Color
+	// if isRepeat {
+	// 	log.Printf("Using cached color")
+	// 	color = cachedColor
+	// } else {
+	// 	log.Printf("Getting current color")
+	// 	color = getColor(cmdDeadline)
+	// }
+	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Kelvin <= lifxlan.KelvinMin+kelvin_step {
 		color.Kelvin = lifxlan.KelvinMin
@@ -240,8 +276,16 @@ func makeWarmer() {
 	setColor(color, cmdDeadline)
 }
 
-func makeCooler() {
-	color := getColor(cmdDeadline)
+func makeCooler(isRepeat bool) {
+	// var color *lifxlan.Color
+	// if isRepeat {
+	// 	log.Printf("Using cached color")
+	// 	color = cachedColor
+	// } else {
+	// 	log.Printf("Getting current color")
+	// 	color = getColor(cmdDeadline)
+	// }
+	color := getColor(cmdDeadline, isRepeat)
 
 	if color.Kelvin >= lifxlan.KelvinMax-kelvin_step {
 		color.Kelvin = lifxlan.KelvinMax
@@ -354,7 +398,7 @@ func pingLight() {
 	}()
 
 	for {
-		color := getColor(cmdDeadline)
+		color := getColor(cmdDeadline, false)
 		if color == nil {
 			log.Printf("----- keepAlive couldn't reach light!")
 		}
@@ -363,7 +407,7 @@ func pingLight() {
 	}
 }
 
-func handleInput(dev string, handle func(byte)) {
+func handleInput(dev string, handle func(byte, bool)) {
 	defer func() {
 		recover()
 		log.Print("handleInput recovered from a panic; let's run again...")
@@ -398,7 +442,7 @@ func handleInput(dev string, handle func(byte)) {
 	}
 }
 
-func repeater(keyDown chan byte, handle func(byte)) {
+func repeater(keyDown chan byte, handle func(byte, bool)) {
 	var key byte
 
 	ticker := &time.Ticker{}
@@ -411,16 +455,16 @@ func repeater(keyDown chan byte, handle func(byte)) {
 				ticker.Stop()
 				timer.Stop()
 			} else {
-				handle(key)
+				handle(key, false)
 				timer = time.NewTimer(time.Millisecond * 500)
 			}
 
 		case <-timer.C:
-			handle(key)
-			ticker = time.NewTicker(time.Millisecond * 200)
+			handle(key, true)
+			ticker = time.NewTicker(time.Millisecond * 100)
 
 		case <-ticker.C:
-			handle(key)
+			handle(key, true)
 		}
 	}
 }
@@ -435,7 +479,7 @@ func repeater(keyDown chan byte, handle func(byte)) {
 // always look at index 2 to see what single key is considered down, and consider
 // it released when that slot is 0.
 
-func keys(k byte) {
+func keys(k byte, isRepeat bool) {
 	log.Printf("Read (or repeating) key code: %v\n", k)
 
 	switch k {
@@ -460,9 +504,9 @@ func keys(k byte) {
 	case 0x17: // [T]
 		setWhite(2000, 1)
 	case 0x3a: // [G1] / paddle up
-		makeBrighter()
+		makeBrighter(isRepeat)
 	case 0x2c: // [--] / paddle down
-		makeDimmer()
+		makeDimmer(isRepeat)
 	case 0x3b: // [G2]
 		setBrightness(1.0)
 	case 0x3c: // [G3]
@@ -482,9 +526,9 @@ func keys(k byte) {
 	case 0x05: // [B]
 		setColorTemp(1.0)
 	case 0x11: // [N]
-		makeWarmer()
+		makeWarmer(isRepeat)
 	case 0x13: // [P]
-		makeCooler()
+		makeCooler(isRepeat)
 	case 0:
 		// ignore
 	default:
