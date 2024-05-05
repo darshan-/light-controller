@@ -214,10 +214,18 @@ func makeBrighter(isRepeat bool) {
 	setColor(color, cmdDeadline)
 }
 
+// I'm actually finding min_brightness to be too low, and one step up from it to be my min useful brightness.
+// I use it regularly at one step above.  "MinBrightness" in the name is thus now not refering to the min_brightness
+// const, but to the min brightness preset.  The lowest I find desirable, the lowest I recommend, etc.  The hardware
+// supports one of my step sizes lower, making this a particularly on-point preset, as it feels good that I *can* go
+// to true hardware minimum, like "turning it up to 11", or more meaninfully like KDE allowing volume to go above 100%.
+// This is, I think, the exact same concept as that.  Why call it 100% if it's not 100%?  Because it's the maximum
+// recommended volume, defined as 100%, with >100% being possible and optionally accessible.  Similarly, this min is
+// a soft min, but the hardware supports exceeding the "min" if desired.
 func setMinBrightness() {
 	color := getColor(cmdDeadline, false)
 
-	color.Brightness = uint16(min_brightness)
+	color.Brightness = uint16(min_brightness+brightness_step)
 
 	setColor(color, cmdDeadline)
 }
