@@ -140,9 +140,9 @@ func getColor(deadline time.Duration, useCached bool) *lifxlan.Color {
 	ctx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 
-	start := time.Now()
+	//start := time.Now()
 	color, err := dev.GetColor(ctx, conn)
-	log.Printf("GetColor call took %v", time.Since(start))
+	//log.Printf("GetColor call took %v", time.Since(start))
 	if err != nil {
 		log.Println("GetColor error:", err)
 
@@ -188,6 +188,8 @@ func setColor(color *lifxlan.Color, deadline time.Duration) {
 			log.Printf("SetColor success after previous error")
 		}
 	}
+
+	setPower(lifxlan.PowerOn, cmdDeadline)
 }
 
 func makeDimmer(isRepeat bool) {
@@ -228,6 +230,10 @@ func setMinBrightness() {
 	color.Brightness = uint16(min_brightness+brightness_step)
 
 	setColor(color, cmdDeadline)
+}
+
+func setMinBoth() {
+	setColor(&lifxlan.Color{Brightness: uint16(min_brightness+brightness_step), Kelvin: lifxlan.KelvinMin}, cmdDeadline)
 }
 
 // brightness b in range 0 - 1
@@ -347,7 +353,6 @@ func togglePower() {
 
 func setWhite(k uint16, b float32) {
 	setColor(&lifxlan.Color{Kelvin: k, Brightness: uint16(b * 65535)}, cmdDeadline)
-	setPower(lifxlan.PowerOn, cmdDeadline)
 }
 
 func main() {
@@ -495,6 +500,8 @@ func keys(k byte, isRepeat bool) {
 		makeBrighter(isRepeat)
 	case 0x2c: // [--] / paddle down
 		makeDimmer(isRepeat)
+	case 0x35: // [~]
+		setMinBoth()
 	case 0x3b: // [G2]
 		setBrightness(1.0)
 	case 0x3c: // [G3]
